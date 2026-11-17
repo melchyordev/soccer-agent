@@ -12,7 +12,6 @@ export interface Env {
 }
 
 interface AgentRunResult {
-  status: "sent" | "aborted";
   message: string;
   logs: string[];
 }
@@ -69,8 +68,6 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     5. After ALL searches are finished, output ONLY the raw HTML. Do NOT include any conversational intro, outro, or markdown \`\`\` html fences.
   `;
 
-  let failedSearches = 0;
-
   log("[generateText] Starting agent run", { date: today });
 
   const result = await generateText({
@@ -85,13 +82,12 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
         maxResults: 3,
       }),
     },
-    stopWhen: stepCountIs(12),
+    stopWhen: stepCountIs(15),
     onToolExecutionStart: ({ toolCall }) => {
       log("[tavilySearch] Query", toolCall.input);
     },
     onToolExecutionEnd: ({ toolOutput }) => {
       if (toolOutput.type === "tool-error") {
-        failedSearches++;
         log("[tavilySearch] Error", { error: toolOutput.error });
       } else {
         log("[tavilySearch] Completed", toolOutput.output);
@@ -109,14 +105,6 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     totalSteps: result.steps.length,
     totalTokens: result.usage.totalTokens,
   });
-
-  if (failedSearches > 0) {
-    return {
-      status: "aborted",
-      message: `${failedSearches} ${failedSearches === 1 ? "search" : "searches"} failed`,
-      logs,
-    };
-  }
 
   const cleanHTML = result.text
     .replace(/^```html\s*/i, "")
@@ -139,7 +127,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
 
   log("[sendEmail] Sent");
 
-  return { status: "sent", message: `Email ${data.id} sent`, logs };
+  return { message: `Email ${data.id} sent`, logs };
 }
 
 export default {
