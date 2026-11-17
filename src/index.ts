@@ -88,7 +88,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     ${TRACKING_CONFIG.interests.map((x, i) => `${i + 1}. ${x}`).join("\n")}
 
     WORKFLOW:
-    1. Run targeted web searches using 'tavilySearch' for each competition/team above based on today's date (${today}). Combine related queries where helpful to stay efficient.
+    1. Run targeted web searches using 'tavilySearch' for each competition/team above based on today's date (${today}).
     2. For any upcoming match found, verify WHERE to watch/stream it in the US and convert the start time to ${TRACKING_CONFIG.timezone} (ET).
     3. Filter out social media fluff, rumors, and teams not on the list. Briefly note "Off Season / No upcoming matches" for inactive teams/tournaments.
     4. Never include any match results or scores.
