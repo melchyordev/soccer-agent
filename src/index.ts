@@ -1,8 +1,7 @@
 import { tavilySearch } from "@tavily/ai-sdk";
 import { createAI } from "agents/models/ai-sdk";
-import { generateText, stepCountIs, tool } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { Resend } from "resend";
-import { z } from "zod";
 
 export interface Env {
   AI: Ai;
@@ -13,14 +12,14 @@ export interface Env {
 }
 
 interface AgentRunResult {
-  summary: string;
+  emailId?: string;
   logs: string[];
 }
 
 const TRACKING_CONFIG = {
   timezone: "America/New_York",
   lookAheadDays: 7,
-  interests: [
+  competitions: [
     "MLS: Regular season matches for San Diego FC, New England Revolution, and Orlando City SC ONLY. If MLS Cup Playoffs are active, cover all playoff matches. Also include major updates to the Supporter's Shield and Golden Boot races.",
     "USL Championship: Regular season matches for Orange County SC ONLY. If USL Championship playoffs are active, cover all playoff matches.",
     "USL Cup: Orange County SC matches ONLY for all rounds of the tournament.",
@@ -54,46 +53,22 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     console.log(entry);
   };
 
-  const sendEmailTool = tool({
-    description: "Send the final formatted HTML soccer briefing via email",
-    inputSchema: z.object({
-      subject: z.string().describe("Concise email subject line with date range"),
-      htmlBody: z.string().describe("Clean, scannable HTML email body"),
-    }),
-    execute: async ({ subject, htmlBody }) => {
-      log("[sendEmail] Sending email", { subject });
-
-      const { data, error } = await resend.emails.send({
-        from: "Soccer Agent <onboarding@resend.dev>",
-        to: [env.EMAIL_ADDRESS],
-        subject,
-        html: htmlBody,
-      });
-
-      if (error) {
-        log("[sendEmail] Failed", { error });
-        throw new Error(`Resend error: ${error.message}`);
-      }
-
-      log("[sendEmail] Sent");
-      return { status: "sent", emailId: data.id };
-    },
-  });
-
   const instructions = `
     You are a personal soccer research agent. Today's date is ${today}.
-    Gather upcoming match schedules (next ${TRACKING_CONFIG.lookAheadDays} days), US broadcast/streaming info, and key team/tournament news.
+    Your ONLY job is to search for upcoming match schedules (next ${TRACKING_CONFIG.lookAheadDays} days), US broadcast/streaming info, and key team/tournament news, then output the final HTML briefing.
 
     STRICT TRACKING RULES:
-    ${TRACKING_CONFIG.interests.map((x, i) => `${i + 1}. ${x}`).join("\n")}
+    ${TRACKING_CONFIG.competitions.map((x, i) => `${i + 1}. ${x}`).join("\n")}
 
-    WORKFLOW:
-    1. Run targeted web searches using 'tavilySearch' for each competition/team above based on today's date (${today}).
+    MANDATORY EXECUTION ORDER:
+    1. You must call 'tavilySearch' to check EVERY ONE of the 6 competitions above before writing your final response. Do NOT skip any competition.
     2. For any upcoming match found, verify WHERE to watch/stream it in the US and convert the start time to ${TRACKING_CONFIG.timezone} (ET).
     3. Filter out social media fluff, rumors, and teams not on the list. Briefly note "Off Season / No upcoming matches" for inactive teams/tournaments.
     4. Never include any match results or scores.
-    5. Call 'sendEmail' with a clean, scannable HTML digest grouped by league/team or tournament.
+    5. After ALL searches are finished, output ONLY the raw HTML. Do NOT include any conversational intro, outro, or markdown \`\`\` html fences.
   `;
+
+  let failedSearches = 0;
 
   log("[generateText] Starting agent run", { date: today });
 
@@ -101,23 +76,23 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     model: ai("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
     instructions,
     prompt:
-      "Compile my soccer schedule, streaming guide, and news briefing for the next 7 days and email it to me.",
+      "Compile my soccer schedule, streaming guide, and news briefing for the next 7 days and return the completed HTML briefing.",
     tools: {
       tavilySearch: tavilySearch({
         apiKey: env.TAVILY_API_KEY,
         searchDepth: "basic",
         maxResults: 3,
       }),
-      sendEmail: sendEmailTool,
     },
     stopWhen: stepCountIs(12),
     onToolExecutionStart: ({ toolCall }) => {
-      if (toolCall.toolName === "tavilySearch") {
-        log("[tavilySearch] Query", toolCall.input);
-      }
+      log("[tavilySearch] Query", toolCall.input);
     },
-    onToolExecutionEnd: ({ toolCall, toolOutput }) => {
-      if (toolCall.toolName === "tavilySearch" && toolOutput.type === "tool-result") {
+    onToolExecutionEnd: ({ toolOutput }) => {
+      if (toolOutput.type === "tool-error") {
+        failedSearches++;
+        log("[tavilySearch] Error", { error: toolOutput.error });
+      } else {
         log("[tavilySearch] Completed", toolOutput.output);
       }
     },
@@ -134,7 +109,34 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     totalTokens: result.usage.totalTokens,
   });
 
-  return { summary: result.text, logs };
+  if (failedSearches > 0) {
+    throw new Error(
+      `Aborted email: ${failedSearches} ${failedSearches === 1 ? "search" : "searches"} failed`,
+    );
+  }
+
+  const cleanHTML = result.text
+    .replace(/^```html\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  log("[Email] Sending email");
+
+  const { data, error } = await resend.emails.send({
+    from: "Soccer Agent <onboarding@resend.dev>",
+    to: [env.EMAIL_ADDRESS],
+    subject: `Soccer Briefing * ${today}`,
+    html: cleanHTML,
+  });
+
+  if (error) {
+    log("[Email] Failed", { error });
+    throw new Error(`Resend error: ${error.message}`);
+  }
+
+  log("[sendEmail] Sent");
+
+  return { emailId: data.id, logs };
 }
 
 export default {
@@ -155,12 +157,12 @@ export default {
       }
 
       try {
-        const { summary, logs } = await runSoccerAgent(env, true);
+        const { emailId, logs } = await runSoccerAgent(env, true);
 
         return Response.json(
           {
             status: "completed",
-            summary,
+            emailId,
             logs,
           },
           { status: 200 },
