@@ -3,6 +3,8 @@ import { createAI } from "agents/models/ai-sdk";
 import { generateText, stepCountIs } from "ai";
 import { Resend } from "resend";
 
+import { formatDate, getInstructions } from "./instructions";
+
 export interface Env {
   AI: Ai;
   TAVILY_API_KEY: string;
@@ -16,31 +18,11 @@ interface AgentRunResult {
   logs: string[];
 }
 
-const TRACKING_CONFIG = {
-  timezone: "America/New_York",
-  lookAheadDays: 7,
-  competitions: [
-    "MLS: Regular season matches for San Diego FC, New England Revolution, and Orlando City SC ONLY. If MLS Cup Playoffs are active, cover all playoff matches. Also include major updates to the Supporter's Shield and Golden Boot races.",
-    "USL Championship: Regular season matches for Orange County SC ONLY. If USL Championship playoffs are active, cover all playoff matches.",
-    "USL Cup: Orange County SC matches ONLY for all rounds of the tournament.",
-    "CONCACAF Champions Cup: ALL matches and tournament updates.",
-    "U.S. Open Cup: ALL matches and tournament updates.",
-    "Leagues Cup: ALL matches and tournament updates.",
-  ],
-};
-
 async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRunResult> {
+  const today = formatDate(new Date());
   const logs: string[] = [];
   const ai = createAI({ binding: env.AI });
   const resend = new Resend(env.RESEND_API_KEY);
-
-  const today = new Date().toLocaleDateString("us-en", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: TRACKING_CONFIG.timezone,
-  });
 
   const log = (message: string, data?: unknown) => {
     if (!loggingEnabled) return;
@@ -53,28 +35,12 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     console.log(entry);
   };
 
-  const instructions = `
-    You are a personal soccer research agent. Today's date is ${today}.
-    Your ONLY job is to search for upcoming match schedules (next ${TRACKING_CONFIG.lookAheadDays} days), US broadcast/streaming info, and key team/tournament news, then output the final HTML briefing.
-
-    STRICT TRACKING RULES:
-    ${TRACKING_CONFIG.competitions.map((x, i) => `${i + 1}. ${x}`).join("\n")}
-
-    MANDATORY EXECUTION ORDER:
-    1. You must call 'tavilySearch' to check EVERY ONE of the 6 competitions above before writing your final response. Do NOT skip any competition.
-    2. For any upcoming match found, verify WHERE to watch/stream it in the US and convert the start time to ${TRACKING_CONFIG.timezone} (ET).
-    3. Filter out social media fluff, rumors, and teams not on the list. Briefly note "Off Season / No upcoming matches" for inactive teams/tournaments.
-    4. Never include any match results or scores.
-    5. After ALL searches are finished, output ONLY the raw HTML. Do NOT include any conversational intro, outro, or markdown \`\`\` html fences.
-  `;
-
   log("[generateText] Starting agent run", { date: today });
 
   const result = await generateText({
     model: ai("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
-    instructions,
-    prompt:
-      "Compile my soccer schedule, streaming guide, and news briefing for the next 7 days and return the completed HTML briefing.",
+    instructions: getInstructions(),
+    prompt: "Compile my soccer schedule for the next 7 days and return the specified HTML.",
     tools: {
       tavilySearch: tavilySearch({
         apiKey: env.TAVILY_API_KEY,
@@ -106,18 +72,16 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     totalTokens: result.usage.totalTokens,
   });
 
-  const cleanHTML = result.text
-    .replace(/^```html\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-
   log("[Email] Sending email");
 
   const { data, error } = await resend.emails.send({
     from: "Soccer Agent <onboarding@resend.dev>",
     to: [env.EMAIL_ADDRESS],
     subject: `Soccer Briefing * ${today}`,
-    html: cleanHTML,
+    html: result.text
+      .replace(/^```html\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim(),
   });
 
   if (error) {
@@ -125,7 +89,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     throw new Error(`Resend error: ${error.message}`);
   }
 
-  log("[sendEmail] Sent");
+  log("[Email] Sent");
 
   return { message: `Email ${data.id} sent`, logs };
 }
