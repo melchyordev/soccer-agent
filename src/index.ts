@@ -12,7 +12,8 @@ export interface Env {
 }
 
 interface AgentRunResult {
-  emailId?: string;
+  status: "sent" | "aborted";
+  message: string;
   logs: string[];
 }
 
@@ -110,9 +111,11 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
   });
 
   if (failedSearches > 0) {
-    throw new Error(
-      `Aborted email: ${failedSearches} ${failedSearches === 1 ? "search" : "searches"} failed`,
-    );
+    return {
+      status: "aborted",
+      message: `${failedSearches} ${failedSearches === 1 ? "search" : "searches"} failed`,
+      logs,
+    };
   }
 
   const cleanHTML = result.text
@@ -136,7 +139,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
 
   log("[sendEmail] Sent");
 
-  return { emailId: data.id, logs };
+  return { status: "sent", message: `Email ${data.id} sent`, logs };
 }
 
 export default {
@@ -157,16 +160,9 @@ export default {
       }
 
       try {
-        const { emailId, logs } = await runSoccerAgent(env, true);
+        const result = await runSoccerAgent(env, true);
 
-        return Response.json(
-          {
-            status: "completed",
-            emailId,
-            logs,
-          },
-          { status: 200 },
-        );
+        return Response.json(result, { status: 200 });
       } catch (error: any) {
         return Response.json(
           { status: "error", message: error.message || "Unknown error" },
