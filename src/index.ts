@@ -1,9 +1,9 @@
 import { tavilySearch } from "@tavily/ai-sdk";
 import { createAI } from "agents/models/ai-sdk";
-import { generateText, stepCountIs } from "ai";
+import { stepCountIs, ToolLoopAgent } from "ai";
 import { Resend } from "resend";
 
-import { formatDate, getInstructions } from "./instructions";
+import { formatDate, getPrompt, instructions } from "./instructions";
 
 export interface Env {
   AI: Ai;
@@ -37,10 +37,9 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
 
   log("[generateText] Starting agent run", { date: today });
 
-  const result = await generateText({
+  const agent = new ToolLoopAgent({
     model: ai("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
-    instructions: getInstructions(),
-    prompt: "Compile my soccer schedule for the next 7 days and return the specified HTML.",
+    instructions,
     tools: {
       tavilySearch: tavilySearch({
         apiKey: env.TAVILY_API_KEY,
@@ -67,6 +66,10 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     },
   });
 
+  const result = await agent.generate({
+    prompt: getPrompt(),
+  });
+
   log("[generateText] Completed", {
     totalSteps: result.steps.length,
     totalTokens: result.usage.totalTokens,
@@ -77,7 +80,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
   const { data, error } = await resend.emails.send({
     from: "Soccer Agent <onboarding@resend.dev>",
     to: [env.EMAIL_ADDRESS],
-    subject: `Soccer Briefing * ${today}`,
+    subject: `Soccer Briefing for ${today}`,
     html: result.text
       .replace(/^```html\s*/i, "")
       .replace(/```\s*$/i, "")
