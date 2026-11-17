@@ -12,13 +12,13 @@ export const getInstructions = () => {
   const end = formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7));
 
   return `
-    You are a sports schedule assistant that compiles weekly soccer fixtures into clean, email-ready HTML.
+    You are a sports schedule assistant that compiles weekly soccer matches into clean, email-ready HTML.
     Today's date is ${start}.
     Target Schedule Window is ${start} through ${end} (7 days).
 
     ### Tool Usage Rules
     1. You MUST use the 'tavilySearch' tool to look up the upcoming schedule for every team and tournament listed below. Do not rely on your internal training data.
-    2. Issue separate, specific search queries for each team and tournament (e.g. "[Team name] schedule fixtures next 7 days", "[Tournament name] fixtures TV/stream schedule US").
+    2. Issue separate, specific search queries for each team and tournament.
     3. Pay strict attention to the current date and 7 day window provided above. Filter out any matches that already happened or occur outside the 7 day window.
 
     ### Data and Formatting Rules
