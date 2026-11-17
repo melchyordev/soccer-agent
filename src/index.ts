@@ -1,4 +1,4 @@
-import { tavily as initTavily } from "@tavily/core";
+import { tavilySearch } from "@tavily/ai-sdk";
 import { createAI } from "agents/models/ai-sdk";
 import { generateText, stepCountIs, tool } from "ai";
 import { Resend } from "resend";
@@ -33,7 +33,6 @@ const TRACKING_CONFIG = {
 async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRunResult> {
   const logs: string[] = [];
   const ai = createAI({ binding: env.AI });
-  const tavily = initTavily({ apiKey: env.TAVILY_API_KEY });
   const resend = new Resend(env.RESEND_API_KEY);
 
   const today = new Date().toLocaleDateString("us-en", {
@@ -54,36 +53,6 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     logs.push(entry);
     console.log(entry);
   };
-
-  const webSearchTool = tool({
-    description:
-      "Search the live web for soccer schedules, US TV/streaming channels, and standings.",
-    inputSchema: z.object({
-      query: z
-        .string()
-        .describe(
-          "Specific search query including team/league name, year/month, and 'US TV stream' or 'schedule'",
-        ),
-    }),
-    execute: async ({ query }) => {
-      log("[searchWeb] Query", { query });
-
-      const response = await tavily.search(query, {
-        searchDepth: "basic",
-        maxResults: 5,
-      });
-
-      const formattedResults = response.results.map((r) => ({
-        title: r.title,
-        content: r.content,
-        url: r.url,
-      }));
-
-      log("[searchWeb] Completed", { query, results: formattedResults });
-
-      return formattedResults;
-    },
-  });
 
   const sendEmailTool = tool({
     description: "Send the final formatted HTML soccer briefing via email",
@@ -134,10 +103,24 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     prompt:
       "Compile my soccer schedule, streaming guide, and news briefing for the next 7 days and email it to me.",
     tools: {
-      searchWeb: webSearchTool,
+      tavilySearch: tavilySearch({
+        apiKey: env.TAVILY_API_KEY,
+        searchDepth: "basic",
+        maxResults: 3,
+      }),
       sendEmail: sendEmailTool,
     },
     stopWhen: stepCountIs(12),
+    onToolExecutionStart: ({ toolCall }) => {
+      if (toolCall.toolName === "tavilySearch") {
+        log("[tavilySearch] Query", toolCall.input);
+      }
+    },
+    onToolExecutionEnd: ({ toolCall, toolOutput }) => {
+      if (toolCall.toolName === "tavilySearch" && toolOutput.type === "tool-result") {
+        log("[tavilySearch] Completed", toolOutput.output);
+      }
+    },
     onStepEnd: ({ finishReason, toolCalls, usage }) => {
       log(`[generateText] Step finished (${finishReason})`, {
         toolsCalled: toolCalls.map((t) => t.toolName),
