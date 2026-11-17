@@ -1,10 +1,11 @@
 import { tavily as initTavily } from "@tavily/core";
+import { createAI } from "agents/models/ai-sdk";
 import { generateText, stepCountIs, tool } from "ai";
 import { Resend } from "resend";
 import { z } from "zod";
 
 export interface Env {
-  // model api key
+  AI: Ai;
   TAVILY_API_KEY: string;
   RESEND_API_KEY: string;
   EMAIL_ADDRESS: string;
@@ -31,7 +32,7 @@ const TRACKING_CONFIG = {
 
 async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRunResult> {
   const logs: string[] = [];
-  // model api
+  const ai = createAI({ binding: env.AI });
   const tavily = initTavily({ apiKey: env.TAVILY_API_KEY });
   const resend = new Resend(env.RESEND_API_KEY);
 
@@ -128,7 +129,7 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
   log("[generateText] Starting agent run", { date: today });
 
   const result = await generateText({
-    model: "",
+    model: ai("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
     instructions,
     prompt:
       "Compile my soccer schedule, streaming guide, and news briefing for the next 7 days and email it to me.",
