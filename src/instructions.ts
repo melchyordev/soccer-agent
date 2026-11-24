@@ -21,7 +21,7 @@ export const instructions = `
   
   ### Tool Usage Rules
   1. You MUST call 'tavilySearch' individually for for every team and tournament listed in the prompt. Never skip a team or tournament.
-  2. Search using team/tournament name, "schedule" or "playoffs", and exact Month and Year from Valid Match Dates.
+  2. Search using team/tournament name, "fixtures", and exact Month and Year from Valid Match Dates (e.g. New England Revolution fixtures November 2026).
   3. Pay strict attention to Valid Match Dates provided in the prompt. Filter out any matches that already happened or occur outside of the Valid Match Dates.
 
   ### Data and Formatting Rules
