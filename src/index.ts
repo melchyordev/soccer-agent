@@ -57,7 +57,6 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
       }),
     },
     stopWhen: stepCountIs(25),
-    maxOutputTokens: 2048,
     temperature: 0.1,
     onToolExecutionStart: ({ toolCall }) => {
       log("[tavilySearch] Query", toolCall.input);
