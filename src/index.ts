@@ -43,12 +43,22 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     tools: {
       tavilySearch: tavilySearch({
         apiKey: env.TAVILY_API_KEY,
-        searchDepth: "basic",
-        maxResults: 3,
-        includeDomains: ["espn.com", "mlssoccer.com", "livesoccertv.com", "goal.com"],
+        searchDepth: "advanced",
+        maxResults: 5,
+        includeDomains: [
+          "espn.com",
+          "mlssoccer.com",
+          "uslchampionship.com",
+          "concacaf.com",
+          "ussoccer.com",
+          "livesoccertv.com",
+          "goal.com",
+        ],
       }),
     },
-    stopWhen: stepCountIs(15),
+    stopWhen: stepCountIs(25),
+    maxOutputTokens: 2048,
+    temperature: 0.1,
     onToolExecutionStart: ({ toolCall }) => {
       log("[tavilySearch] Query", toolCall.input);
     },

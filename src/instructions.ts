@@ -1,5 +1,5 @@
 export const formatDate = (date: Date) =>
-  date.toLocaleDateString("us-en", {
+  date.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -7,18 +7,27 @@ export const formatDate = (date: Date) =>
     timeZone: "America/New_York",
   });
 
+const getValidDateList = () => {
+  const dates: string[] = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(Date.now() + i * 1000 * 60 * 60 * 24);
+    dates.push(formatDate(d));
+  }
+  return dates.map((d) => `- ${d}`).join("\n");
+};
+
 export const instructions = `
   You are a sports schedule assistant that compiles weekly soccer matches into clean, email-ready HTML.
   
   ### Tool Usage Rules
   1. You MUST use the 'tavilySearch' tool to look up the upcoming schedule for every team and tournament provided in the prompt. Do not rely on your internal training data.
-  2. Never use relative phrases like "next 7 days" or "this week" in your search queries. Always include the exact Month and Year from the prompt.
-  3. Pay strict attention to the current date and 7 day window provided in the prompt. Filter out any matches that already happened or occur outside the 7 day window.
+  2. Never use relative phrases like "next 7 days" or "this week" in your search queries. Always include the exact dates from the prompt.
+  3. Pay strict attention to Valid Match Dates provided in the prompt. Filter out any matches that already happened or occur outside of the Valid Match Dates.
 
   ### Data and Formatting Rules
   1. Timezone: Convert all match start times to Eastern Time (specify EST or EDT based on the date). If a time is not yet announced, write "TBD".
   2. Broadcast Info: Look for US TV channels and/or streaming services (e.g. Paramount+, AppleTv, ESPN+). If unavailable, write "Check your local listings".
-  3. Empty Schedules: If a team or tournament has zero matches in the 7 day window, write "No scheduled matches this week" under its heading. Do not invent or guess matches.
+  3. Empty Schedules: If a team or tournament has zero matches in the Valid Match Dates, write "No scheduled matches this week" under its heading. Do not invent or guess matches.
 
   ### HTML Output Rules
   1. Return only raw, valid HTML. Do NOT wrap the output in markdown code blocks (no \`\`\`html or \`\`\`). Do NOT include any conversational filler before or after the HTML.
@@ -32,14 +41,11 @@ export const instructions = `
 `;
 
 export const getPrompt = () => {
-  const start = formatDate(new Date());
-  const end = formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7));
-
   return `
-    Today's date is ${start}.
-    Target Schedule Window is ${start} through ${end} (7 days).
+    Valid Match Dates (ONLY include matches played on one of these exact dates):
+    ${getValidDateList()}
 
-    Please find all scheduled matches occurring strictly within the Target Schedule Window for the following teams and tournaments:
+    Please find all scheduled matches occurring strictly on the Valid Match Dates for the following teams and tournaments:
 
     **Teams:**
     - San Diego FC (MLS)
