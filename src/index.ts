@@ -43,8 +43,8 @@ async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRu
     tools: {
       tavilySearch: tavilySearch({
         apiKey: env.TAVILY_API_KEY,
-        searchDepth: "advanced",
-        maxResults: 5,
+        searchDepth: "basic",
+        maxResults: 3,
         includeDomains: [
           "espn.com",
           "mlssoccer.com",
