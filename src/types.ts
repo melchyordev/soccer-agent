@@ -29,11 +29,10 @@ export interface RawFixture {
 }
 
 export interface Fixture {
+  date: string;
   startTime: string;
   competition: string;
   round: string;
-  home: string;
-  away: string;
-  venue: string;
-  city: string;
+  matchup: string;
+  location: string;
 }
