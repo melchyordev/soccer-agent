@@ -1,31 +1,41 @@
-import { ApiSportsEnvelope, Env, Fixture, RawFixture } from "./types";
+import { TEAMS } from "./constants";
+import { Env, Fixture, RawFixture } from "./types";
 
-const API_BASE = "https://v3.football.api-sports.io";
+const API_BASE = "https://api.api-ninjas.com/v1/soccermatches";
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-export const isPlayoffRound = (round: string) =>
-  /play-?off|final|semi|quarter|round of 16|knockout|wild card/i.test(round);
-
-export const fetchFootballApi = async (path: string, env: Env): Promise<RawFixture[]> => {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "x-apisports-key": env.FOOTBALL_API_KEY },
+export const fetchMatches = async (
+  league: string,
+  season: string,
+  env: Env,
+): Promise<RawFixture[]> => {
+  const res = await fetch(`${API_BASE}?league=${league}&season=${season}&status=scheduled`, {
+    headers: { "X-Api-Key": env.API_NINJAS_KEY },
   });
 
   if (!res.ok) {
     return [];
   }
 
-  const data = (await res.json()) as ApiSportsEnvelope<RawFixture>;
-  return data.response;
+  return (await res.json()) as RawFixture[];
 };
 
 export const formatFixture = (fixture: RawFixture): Fixture => ({
-  startTime: fixture.fixture.date,
-  competition: fixture.league.name,
-  round: fixture.league.round,
-  home: fixture.teams.home.name,
-  away: fixture.teams.away.name,
-  venue: fixture.fixture.venue.name,
-  city: fixture.fixture.venue.city,
+  date: fixture.date,
+  startTime: fixture.start_time,
+  competition: fixture.league,
+  round: fixture.round,
+  home: fixture.home_team.name,
+  away: fixture.away_team.name,
+  venue: fixture.venue.name,
+  city: fixture.venue.city,
 });
+
+const isTrackedTeam = (name: string) => TEAMS.some((c) => name.toLocaleLowerCase().includes(c));
+
+export const filterDomestic = (matches: RawFixture[]) =>
+  matches.filter(
+    (m) =>
+      m.season_type === "postseason" ||
+      isTrackedTeam(m.home_team.name) ||
+      isTrackedTeam(m.away_team.name),
+  );

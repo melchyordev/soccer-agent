@@ -2,9 +2,9 @@ import { createAI } from "agents/models/ai-sdk";
 import { jsonSchema, stepCountIs, tool, ToolLoopAgent } from "ai";
 import { Resend } from "resend";
 
-import { instructions, LEAGUES, TEAMS } from "./constants";
-import { AgentRunResult, Env, RawFixture } from "./types";
-import { fetchFootballApi, formatFixture, isPlayoffRound, sleep } from "./utils";
+import { instructions, LEAGUES } from "./constants";
+import { AgentRunResult, Env } from "./types";
+import { fetchMatches, filterDomestic, formatFixture } from "./utils";
 
 async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const ai = createAI({ binding: env.AI });
@@ -12,45 +12,40 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
 
   const today = Temporal.Now.plainDateISO("America/New_York");
   const nextWeek = today.add({ days: 7 });
+  const season = today.year.toString();
 
   const getWeeklySchedule = tool({
     description:
       "Fetch all scheduled soccer matches for tracked teams and leagues for the upcoming 8-day Sunday to Sunday window.",
     inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
     execute: async () => {
-      const rawFixtures: RawFixture[] = [];
+      const [mls, uslc, openCup, leaguesCup, concacaf] = await Promise.all([
+        fetchMatches(LEAGUES.MLS, season, env),
+        fetchMatches(LEAGUES.USL_CHAMPIONSHIP, season, env),
+        fetchMatches(LEAGUES.US_OPEN_CUP, season, env),
+        fetchMatches(LEAGUES.LEAGUES_CUP, season, env),
+        fetchMatches(LEAGUES.CONCACAF_CHAMPIONS_CUP, season, env),
+      ]);
 
-      for (const team in Object.values(TEAMS)) {
-        const data = await fetchFootballApi(
-          `/fixtures?team=${team}&season=${today.year}&from=${today.toString()}&to=${nextWeek.toString()}`,
-          env,
-        );
-        rawFixtures.push(...data);
-      }
+      const combined = [
+        ...filterDomestic(mls),
+        ...filterDomestic(uslc),
+        ...openCup,
+        ...leaguesCup,
+        ...concacaf,
+      ];
 
-      await sleep(7000);
+      const seen = new Set<string>();
 
-      for (const [key, leagueId] of Object.entries(LEAGUES)) {
-        const data = await fetchFootballApi(
-          `/fixtures?league=${leagueId}&season=${today.year}&from=${today.toString()}&to=${nextWeek.toString()}`,
-          env,
-        );
-        if (key === "MLS" || key === "USL_CHAMPIONSHIP") {
-          rawFixtures.push(...data.filter((f) => isPlayoffRound(f.league.round)));
-        } else {
-          rawFixtures.push(...data);
-        }
-      }
-
-      const seen = new Set<number>();
-
-      return rawFixtures
+      return combined
         .filter((f) => {
-          if (seen.has(f.fixture.id)) return false;
-          seen.add(f.fixture.id);
-          return true;
+          if (!f.game_id || seen.has(f.game_id)) return false;
+          seen.add(f.game_id);
+          return (
+            Temporal.PlainDate.compare(f.date, today) >= 0 &&
+            Temporal.PlainDate.compare(f.date, nextWeek) <= 0
+          );
         })
-        .sort((a, b) => Date.parse(a.fixture.date) - Date.parse(b.fixture.date))
         .map((f) => formatFixture(f));
     },
   });
@@ -62,7 +57,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
     stopWhen: stepCountIs(5),
   });
 
-  const { text, toolResults } = await agent.generate({
+  const { text } = await agent.generate({
     prompt: "Compile the weekly soccer digest ",
   });
 
@@ -82,7 +77,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
     throw new Error(`Resend error: ${error.message}`);
   }
 
-  return { html, toolResults: toolResults[0].output };
+  return { html };
 }
 
 export default {
@@ -103,9 +98,9 @@ export default {
       }
 
       try {
-        const result = await runSoccerAgent(env);
+        const { html } = await runSoccerAgent(env);
 
-        return Response.json(result, { status: 200 });
+        return new Response(html, { headers: { "Content-Type": "text/html" }, status: 200 });
       } catch (error: any) {
         return Response.json(
           { status: "error", message: error.message || "Unknown error" },

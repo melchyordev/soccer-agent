@@ -1,6 +1,6 @@
 export interface Env {
   AI: Ai;
-  FOOTBALL_API_KEY: string;
+  API_NINJAS_KEY: string;
   RESEND_API_KEY: string;
   EMAIL_ADDRESS: string;
   TRIGGER_SECRET: string;
@@ -8,38 +8,29 @@ export interface Env {
 
 export interface AgentRunResult {
   html: string;
-  toolResults: any;
-}
-
-export interface ApiSportsEnvelope<T> {
-  response: T[];
-  [key: string]: unknown;
 }
 
 export interface RawFixture {
-  fixture: {
-    id: number;
-    date: string;
-    venue: {
-      name: string;
-      city: string;
-    };
-  };
-  league: {
+  game_id: string;
+  league: string;
+  season_type: string;
+  round: string;
+  date: string;
+  start_time: string;
+  home_team: {
     name: string;
-    round: string;
   };
-  teams: {
-    home: {
-      name: string;
-    };
-    away: {
-      name: string;
-    };
+  away_team: {
+    name: string;
+  };
+  venue: {
+    name: string;
+    city: string;
   };
 }
 
 export interface Fixture {
+  date: string;
   startTime: string;
   competition: string;
   round: string;

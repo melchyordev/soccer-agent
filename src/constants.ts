@@ -1,17 +1,18 @@
-export const TEAMS: Record<string, number> = {
-  LAFC: 1616,
-  "New England Revolution": 1609,
-  "Orange County SC": 4007,
-  "Orlando City SC": 1598,
-  "San Diego FC": 25484,
-};
+export const TEAMS = [
+  "lafc",
+  "los angeles fc",
+  "new england revolution",
+  "orange county",
+  "orlando city",
+  "san diego",
+];
 
 export const LEAGUES = {
-  CONCACAF_CHAMPIONS_CUP: 16,
-  LEAGUES_CUP: 772,
-  MLS: 866,
-  US_OPEN_CUP: 257,
-  USL_CHAMPIONSHIP: 255,
+  CONCACAF_CHAMPIONS_CUP: "concacafcc",
+  LEAGUES_CUP: "leaguescup",
+  MLS: "mls",
+  US_OPEN_CUP: "usopencup",
+  USL_CHAMPIONSHIP: "uslc",
 };
 
 export const instructions = `
