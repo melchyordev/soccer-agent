@@ -3,7 +3,7 @@
   "name": "soccer-agent",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-16",
-  "compatibility_flags": ["nodejs_compat", "temporal"],
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
   },
