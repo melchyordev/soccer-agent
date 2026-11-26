@@ -18,8 +18,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const end = new Date(start.getTime() + 8 * 24 * 60 * 60 * 1000 - 1);
 
   const getWeeklySchedule = tool({
-    description:
-      "Fetch all scheduled soccer matches for tracked teams and leagues for the upcoming 8-day Sunday to Sunday window.",
+    description: "Fetch all scheduled soccer matches for tracked teams and leagues.",
     inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
     execute: async () => {
       const [mls, uslc, openCup, leaguesCup, concacaf] = await Promise.all([
@@ -59,7 +58,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   });
 
   const { text } = await agent.generate({
-    prompt: "Compile the weekly soccer digest ",
+    prompt: "Compile the weekly soccer digest.",
   });
 
   const html = text
