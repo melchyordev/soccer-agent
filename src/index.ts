@@ -62,7 +62,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
     stopWhen: stepCountIs(5),
   });
 
-  const { text } = await agent.generate({
+  const { text, toolResults } = await agent.generate({
     prompt: "Compile the weekly soccer digest ",
   });
 
@@ -74,7 +74,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const { error } = await resend.emails.send({
     from: "Soccer Agent <onboarding@resend.dev>",
     to: [env.EMAIL_ADDRESS],
-    subject: `Soccer Briefing for ${today.toString()} - ${nextWeek.toString()}`,
+    subject: `Soccer Matches from ${today.toString()} to ${nextWeek.toString()}`,
     html,
   });
 
@@ -82,7 +82,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
     throw new Error(`Resend error: ${error.message}`);
   }
 
-  return { html };
+  return { html, toolResults: toolResults[0].output };
 }
 
 export default {

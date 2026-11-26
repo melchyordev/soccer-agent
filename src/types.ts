@@ -8,6 +8,7 @@ export interface Env {
 
 export interface AgentRunResult {
   html: string;
+  toolResults: any;
 }
 
 export interface ApiSportsEnvelope<T> {
