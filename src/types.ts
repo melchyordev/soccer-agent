@@ -15,7 +15,6 @@ export interface RawFixture {
   league: string;
   season_type: string;
   round: string;
-  date: string;
   start_time: string;
   home_team: {
     name: string;
@@ -30,7 +29,6 @@ export interface RawFixture {
 }
 
 export interface Fixture {
-  date: string;
   startTime: string;
   competition: string;
   round: string;

@@ -20,7 +20,6 @@ export const fetchMatches = async (
 };
 
 export const formatFixture = (fixture: RawFixture): Fixture => ({
-  date: fixture.date,
   startTime: fixture.start_time,
   competition: fixture.league,
   round: fixture.round,

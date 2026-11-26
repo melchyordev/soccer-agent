@@ -10,8 +10,8 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const ai = createAI({ binding: env.AI });
   const resend = new Resend(env.RESEND_API_KEY);
 
-  const today = Temporal.Now.plainDateISO("America/New_York");
-  const nextWeek = today.add({ days: 7 });
+  const today = Temporal.Now.zonedDateTimeISO("America/New_York").startOfDay();
+  const nextWeek = today.add({ weeks: 1, days: 1 }).startOfDay().subtract({ nanoseconds: 1 });
   const season = today.year.toString();
 
   const getWeeklySchedule = tool({
@@ -41,9 +41,10 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
         .filter((f) => {
           if (!f.game_id || seen.has(f.game_id)) return false;
           seen.add(f.game_id);
+          const target = Temporal.Instant.from(f.start_time);
           return (
-            Temporal.PlainDate.compare(f.date, today) >= 0 &&
-            Temporal.PlainDate.compare(f.date, nextWeek) <= 0
+            Temporal.Instant.compare(target, today.toInstant()) >= 0 &&
+            Temporal.Instant.compare(target, nextWeek.toInstant()) <= 0
           );
         })
         .map((f) => formatFixture(f));
@@ -69,7 +70,7 @@ async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const { error } = await resend.emails.send({
     from: "Soccer Agent <onboarding@resend.dev>",
     to: [env.EMAIL_ADDRESS],
-    subject: `Soccer Matches from ${today.toString()} to ${nextWeek.toString()}`,
+    subject: `Soccer Matches from ${today.toPlainDate().toString()} to ${nextWeek.toPlainDate().toString()}`,
     html,
   });
 
