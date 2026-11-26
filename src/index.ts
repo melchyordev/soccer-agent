@@ -1,114 +1,93 @@
-import { tavilySearch } from "@tavily/ai-sdk";
 import { createAI } from "agents/models/ai-sdk";
-import { stepCountIs, ToolLoopAgent } from "ai";
+import { jsonSchema, stepCountIs, tool, ToolLoopAgent } from "ai";
 import { Resend } from "resend";
 
-import { formatDate, getPrompt, instructions } from "./instructions";
+import { instructions, LEAGUES, TEAMS } from "./constants";
+import { AgentRunResult, Env, RawFixture } from "./types";
+import { fetchFootballApi, formatFixture, isPlayoffRound, sleep } from "./utils";
 
-export interface Env {
-  AI: Ai;
-  TAVILY_API_KEY: string;
-  RESEND_API_KEY: string;
-  EMAIL_ADDRESS: string;
-  TRIGGER_SECRET: string;
-}
-
-interface AgentRunResult {
-  message: string;
-  logs: string[];
-}
-
-async function runSoccerAgent(env: Env, loggingEnabled = false): Promise<AgentRunResult> {
-  const today = formatDate(new Date());
-  const logs: string[] = [];
+async function runSoccerAgent(env: Env): Promise<AgentRunResult> {
   const ai = createAI({ binding: env.AI });
   const resend = new Resend(env.RESEND_API_KEY);
 
-  const log = (message: string, data?: unknown) => {
-    if (!loggingEnabled) return;
+  const today = Temporal.Now.plainDateISO("America/New_York");
+  const nextWeek = today.add({ days: 7 });
 
-    const timestamp = new Date().toISOString();
-    const formattedData = data !== undefined ? ` | ${JSON.stringify(data)}` : "";
-    const entry = `[${timestamp}] ${message}${formattedData}`;
+  const getWeeklySchedule = tool({
+    description:
+      "Fetch all scheduled soccer matches for tracked teams and leagues for the upcoming 8-day Sunday to Sunday window.",
+    inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
+    execute: async () => {
+      const rawFixtures: RawFixture[] = [];
 
-    logs.push(entry);
-    console.log(entry);
-  };
+      for (const team in Object.values(TEAMS)) {
+        const data = await fetchFootballApi(
+          `/fixtures?team=${team}&season=${today.year}&from=${today.toString()}&to=${nextWeek.toString()}`,
+          env,
+        );
+        rawFixtures.push(...data);
+      }
 
-  log("[generateText] Starting agent run", { date: today });
+      await sleep(7000);
+
+      for (const [key, leagueId] of Object.entries(LEAGUES)) {
+        const data = await fetchFootballApi(
+          `/fixtures?league=${leagueId}&season=${today.year}&from=${today.toString()}&to=${nextWeek.toString()}`,
+          env,
+        );
+        if (key === "MLS" || key === "USL_CHAMPIONSHIP") {
+          rawFixtures.push(...data.filter((f) => isPlayoffRound(f.league.round)));
+        } else {
+          rawFixtures.push(...data);
+        }
+      }
+
+      const seen = new Set<number>();
+
+      return rawFixtures
+        .filter((f) => {
+          if (seen.has(f.fixture.id)) return false;
+          seen.add(f.fixture.id);
+          return true;
+        })
+        .sort((a, b) => Date.parse(a.fixture.date) - Date.parse(b.fixture.date))
+        .map((f) => formatFixture(f));
+    },
+  });
 
   const agent = new ToolLoopAgent({
-    model: ai("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
+    model: ai("@cf/zai-org/glm-4.7-flash"),
     instructions,
-    tools: {
-      tavilySearch: tavilySearch({
-        apiKey: env.TAVILY_API_KEY,
-        searchDepth: "basic",
-        maxResults: 3,
-        includeDomains: [
-          "espn.com",
-          "mlssoccer.com",
-          "uslchampionship.com",
-          "concacaf.com",
-          "ussoccer.com",
-          "livesoccertv.com",
-          "goal.com",
-        ],
-      }),
-    },
-    stopWhen: stepCountIs(25),
-    onToolExecutionStart: ({ toolCall }) => {
-      log("[tavilySearch] Query", toolCall.input);
-    },
-    onToolExecutionEnd: ({ toolOutput }) => {
-      if (toolOutput.type === "tool-error") {
-        log("[tavilySearch] Error", { error: toolOutput.error });
-      } else {
-        log("[tavilySearch] Completed", toolOutput.output);
-      }
-    },
-    onStepEnd: ({ finishReason, toolCalls, usage }) => {
-      log(`[generateText] Step finished (${finishReason})`, {
-        toolsCalled: toolCalls.map((t) => t.toolName),
-        tokensUsed: usage.totalTokens,
-      });
-    },
+    tools: { getWeeklySchedule },
+    stopWhen: stepCountIs(5),
   });
 
-  const result = await agent.generate({
-    prompt: getPrompt(),
+  const { text } = await agent.generate({
+    prompt: "Compile the weekly soccer digest ",
   });
 
-  log("[generateText] Completed", {
-    totalSteps: result.steps.length,
-    totalTokens: result.usage.totalTokens,
-  });
+  const html = text
+    .replace(/^```html\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
 
-  log("[Email] Sending email");
-
-  const { data, error } = await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: "Soccer Agent <onboarding@resend.dev>",
     to: [env.EMAIL_ADDRESS],
-    subject: `Soccer Briefing for ${today}`,
-    html: result.text
-      .replace(/^```html\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim(),
+    subject: `Soccer Briefing for ${today.toString()} - ${nextWeek.toString()}`,
+    html,
   });
 
   if (error) {
-    log("[Email] Failed", { error });
     throw new Error(`Resend error: ${error.message}`);
   }
 
-  log("[Email] Sent");
-
-  return { message: `Email ${data.id} sent`, logs };
+  return { html };
 }
 
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSoccerAgent(env, false));
+    ctx.waitUntil(runSoccerAgent(env));
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -124,7 +103,7 @@ export default {
       }
 
       try {
-        const result = await runSoccerAgent(env, true);
+        const result = await runSoccerAgent(env);
 
         return Response.json(result, { status: 200 });
       } catch (error: any) {
